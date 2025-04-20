@@ -16,6 +16,7 @@ int availableEngineers = NUM_ENGINEERS;
 pthread_mutex_t engineerMutex;
 sem_t newRequest;
 sem_t requestHandled;
+int shutdownFlag = 0;  
 
 // Structure for Satellite
 typedef struct {
@@ -129,22 +130,26 @@ void* engineer(void* arg) {
     pthread_cleanup_push(engineer_cleanup, engineer_id_ptr);
 
     while (1) {
-        sem_wait(&newRequest);  // Wait for new request
+        sem_wait(&newRequest);
 
         pthread_mutex_lock(&engineerMutex);
+        if (shutdownFlag && requestQueue.head == NULL) {
+            pthread_mutex_unlock(&engineerMutex);
+            break;  // Exit loop
+        }
         if (requestQueue.head != NULL) {
             Satellite sat = dequeue(&requestQueue);
             availableEngineers--;
             pthread_mutex_unlock(&engineerMutex);
 
             printf("[ENGINEER %d] Handling Satellite %d (Priority %d)\n", engineer_id, sat.id, sat.priority);
-            sleep(rand() % 3 + 1);  // Simulate work
+            sleep(rand() % 3 + 1);
 
             pthread_mutex_lock(&engineerMutex);
             availableEngineers++;
             pthread_mutex_unlock(&engineerMutex);
 
-            sem_post(&sat.handled_sem);  // Signal THIS satellite
+            sem_post(&sat.handled_sem);
             printf("[ENGINEER %d] Finished Satellite %d\n", engineer_id, sat.id);
         } else {
             pthread_mutex_unlock(&engineerMutex);
@@ -185,14 +190,27 @@ int main() {
         pthread_join(satellites[i], NULL);
     }
 
-    // Cancel and join engineer threads
+    pthread_mutex_lock(&engineerMutex);
+    shutdownFlag = 1;
+    pthread_mutex_unlock(&engineerMutex);
+
+    // Wake engineers to check shutdownFlag
     for (int i = 0; i < NUM_ENGINEERS; i++) {
-        pthread_cancel(engineers[i]);
+        sem_post(&newRequest);
+    }
+
+    // Join engineers (no cancellation)
+    for (int i = 0; i < NUM_ENGINEERS; i++) {
         pthread_join(engineers[i], NULL);
     }
 
+    // Destroy semaphores and mutex AFTER engineers exit
+    for (int i = 0; i < 5; i++) {
+        sem_destroy(&sat[i].handled_sem);
+    }
     pthread_mutex_destroy(&engineerMutex);
     sem_destroy(&newRequest);
+
     sem_destroy(&requestHandled);
     return 0;
 }
