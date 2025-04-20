@@ -21,6 +21,7 @@ sem_t requestHandled;
 typedef struct {
     int id;
     int priority;
+    sem_t handled_sem; 
 } Satellite;
 
 // Priority Queue Node
@@ -73,6 +74,21 @@ Satellite dequeue(PriorityQueue* pq) {
     return satellite;
 }
 
+
+// Function to remove a satellite by ID from the queue
+void removeFromQueue(PriorityQueue* pq, int id) {
+    Node** indirect = &pq->head;
+    while (*indirect != NULL) {
+        if ((*indirect)->satellite.id == id) {
+            Node* to_remove = *indirect;
+            *indirect = to_remove->next;
+            free(to_remove);
+            return;
+        }
+        indirect = &(*indirect)->next;
+    }
+}
+
 // Cleanup function for engineer threads
 void engineer_cleanup(void* arg) {
     int engineer_id = *((int*)arg);
@@ -87,15 +103,21 @@ void* satellite(void* arg) {
 
     pthread_mutex_lock(&engineerMutex);
     enqueue(&requestQueue, *sat);
-    sem_post(&newRequest);
+    sem_post(&newRequest);  // Notify engineers of new request
     pthread_mutex_unlock(&engineerMutex);
 
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += TIMEOUT;
 
-    if (sem_timedwait(&requestHandled, &ts) == -1) {
+    // Wait for THIS satellite's semaphore
+    if (sem_timedwait(&sat->handled_sem, &ts) == -1) {
+        pthread_mutex_lock(&engineerMutex);
+        removeFromQueue(&requestQueue, sat->id);  // Remove self from queue
+        pthread_mutex_unlock(&engineerMutex);
         printf("[TIMEOUT] Satellite %d timeout %d second.\n", sat->id, TIMEOUT);
+    } else {
+        printf("[SAIELLITE] Satellite %d update completed.\n", sat->id);
     }
     return NULL;
 }
@@ -107,7 +129,7 @@ void* engineer(void* arg) {
     pthread_cleanup_push(engineer_cleanup, engineer_id_ptr);
 
     while (1) {
-        sem_wait(&newRequest);
+        sem_wait(&newRequest);  // Wait for new request
 
         pthread_mutex_lock(&engineerMutex);
         if (requestQueue.head != NULL) {
@@ -116,13 +138,13 @@ void* engineer(void* arg) {
             pthread_mutex_unlock(&engineerMutex);
 
             printf("[ENGINEER %d] Handling Satellite %d (Priority %d)\n", engineer_id, sat.id, sat.priority);
-            sleep(rand() % 3 + 1);
+            sleep(rand() % 3 + 1);  // Simulate work
 
             pthread_mutex_lock(&engineerMutex);
             availableEngineers++;
             pthread_mutex_unlock(&engineerMutex);
-            sem_post(&requestHandled);
 
+            sem_post(&sat.handled_sem);  // Signal THIS satellite
             printf("[ENGINEER %d] Finished Satellite %d\n", engineer_id, sat.id);
         } else {
             pthread_mutex_unlock(&engineerMutex);
