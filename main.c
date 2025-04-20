@@ -15,6 +15,8 @@ int availableEngineers = NUM_ENGINEERS;
 pthread_mutex_t engineerMutex;
 sem_t newRequest;
 int shutdownFlag = 0;
+int remainingSatellites = 0;
+pthread_mutex_t satelliteCountMutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
     int id;
@@ -100,8 +102,14 @@ void* satellite(void* arg) {
         pthread_mutex_lock(&engineerMutex);
         removeFromQueue(&requestQueue, sat->id);
         pthread_mutex_unlock(&engineerMutex);
+        pthread_mutex_lock(&satelliteCountMutex);
+        remainingSatellites--;
+        pthread_mutex_unlock(&satelliteCountMutex);
         printf("[TIMEOUT] Satellite %d timeout %d second.\n", sat->id, TIMEOUT);
     } else {
+        pthread_mutex_lock(&satelliteCountMutex);
+        remainingSatellites--;
+        pthread_mutex_unlock(&satelliteCountMutex);
         printf("[SAIELLITE] Satellite %d update completed.\n", sat->id);
     }
     return NULL;
@@ -116,7 +124,7 @@ void* engineer(void* arg) {
         sem_wait(&newRequest);
 
         pthread_mutex_lock(&engineerMutex);
-        if (shutdownFlag && requestQueue.head == NULL) {
+        if (remainingSatellites == 0 && requestQueue.head == NULL) {
             pthread_mutex_unlock(&engineerMutex);
             break;
         }
@@ -166,6 +174,7 @@ int main() {
         pthread_create(&engineers[i], NULL, engineer, id);
     }
 
+    remainingSatellites = 5;
     // Create satellites
     pthread_t satellite_threads[5];
     for (int i = 0; i < 5; i++) {
