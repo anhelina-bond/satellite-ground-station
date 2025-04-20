@@ -7,10 +7,10 @@ CC = gcc
 CFLAGS = -Wall -Wextra -pthread
 
 # Target executable
-TARGET = satellite_ground_station
+TARGET = hw3
 
 # Source files
-SRCS = satellite_ground_station.c
+SRCS = main.c
 
 # Object files
 OBJS = $(SRCS:.c=.o)
