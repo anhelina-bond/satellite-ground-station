@@ -101,8 +101,6 @@ void* satellite(void* arg) {
         removeFromQueue(&requestQueue, sat->id);
         pthread_mutex_unlock(&engineerMutex);
         printf("[TIMEOUT] Satellite %d timeout %d second.\n", sat->id, TIMEOUT);
-    } else {
-        printf("[SAIELLITE] Satellite %d update completed.\n", sat->id);
     }
     return NULL;
 }
@@ -123,6 +121,9 @@ void* engineer(void* arg) {
         if (requestQueue.head != NULL) {
             Satellite* sat = dequeue(&requestQueue); // Get pointer
             availableEngineers--;
+            
+            sem_post(&sat->handled_sem); // cancel timeout
+
             pthread_mutex_unlock(&engineerMutex);
 
             printf("[ENGINEER %d] Handling Satellite %d (Priority %d)\n", engineer_id, sat->id, sat->priority);
@@ -132,7 +133,7 @@ void* engineer(void* arg) {
             availableEngineers++;
             pthread_mutex_unlock(&engineerMutex);
 
-            sem_post(&sat->handled_sem); // Signal correct semaphore
+            
             printf("[ENGINEER %d] Finished Satellite %d\n", engineer_id, sat->id);
         } else {
             pthread_mutex_unlock(&engineerMutex);
