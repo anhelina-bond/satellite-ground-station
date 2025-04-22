@@ -13,6 +13,7 @@
 // Shared resources
 int availableEngineers = NUM_ENGINEERS;
 pthread_mutex_t engineerMutex;
+pthread_mutex_t queueMutex; 
 sem_t newRequest;
 int shutdownFlag = 0;
 
@@ -37,25 +38,28 @@ void initQueue(PriorityQueue* pq) {
     pq->head = NULL;
 }
 
-void enqueue(PriorityQueue* pq, Satellite* satellite) { // Accept pointers
+void enqueue(PriorityQueue* pq, Satellite* satellite) {
     Node* newNode = (Node*)malloc(sizeof(Node));
     newNode->satellite = satellite;
     newNode->next = NULL;
 
+    // Empty list or higher priority than head
     if (pq->head == NULL || pq->head->satellite->priority < satellite->priority) {
         newNode->next = pq->head;
         pq->head = newNode;
-    } else {
-        Node* current = pq->head;
-        while (current->next != NULL && current->next->satellite->priority >= satellite->priority) {
-            current = current->next;
-        }
-        newNode->next = current->next;
-        current->next = newNode;
+        return;
     }
+
+    // Find insertion point
+    Node* current = pq->head;
+    while (current->next != NULL && current->next->satellite->priority >= satellite->priority) {
+        current = current->next;
+    }
+    newNode->next = current->next;
+    current->next = newNode;
 }
 
-Satellite* dequeue(PriorityQueue* pq) { // Return pointer
+Satellite* dequeue(PriorityQueue* pq) {
     if (pq->head == NULL) return NULL;
     Node* temp = pq->head;
     Satellite* satellite = temp->satellite;
@@ -63,6 +67,7 @@ Satellite* dequeue(PriorityQueue* pq) { // Return pointer
     free(temp);
     return satellite;
 }
+
 
 void removeFromQueue(PriorityQueue* pq, int id) {
     Node** indirect = &pq->head;
@@ -87,19 +92,19 @@ void* satellite(void* arg) {
     Satellite* sat = (Satellite*)arg;
     printf("[SAIELLITE] Satellite %d requesting (priority %d)\n", sat->id, sat->priority);
 
-    pthread_mutex_lock(&engineerMutex);
+    pthread_mutex_lock(&queueMutex);
     enqueue(&requestQueue, sat); // Pass pointer
     sem_post(&newRequest);
-    pthread_mutex_unlock(&engineerMutex);
+    pthread_mutex_unlock(&queueMutex);
 
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     ts.tv_sec += TIMEOUT;
 
     if (sem_timedwait(&sat->handled_sem, &ts) == -1) {
-        pthread_mutex_lock(&engineerMutex);
+        pthread_mutex_lock(&queueMutex);
         removeFromQueue(&requestQueue, sat->id);
-        pthread_mutex_unlock(&engineerMutex);
+        pthread_mutex_unlock(&queueMutex);
         printf("[TIMEOUT] Satellite %d timeout %d second.\n", sat->id, TIMEOUT);
     }
     return NULL;
@@ -119,7 +124,9 @@ void* engineer(void* arg) {
             break;
         }
         if (requestQueue.head != NULL) {
+            pthread_mutex_lock(&queueMutex);
             Satellite* sat = dequeue(&requestQueue); // Get pointer
+            pthread_mutex_unlock(&queueMutex);
             availableEngineers--;
             
             sem_post(&sat->handled_sem); // cancel timeout
@@ -157,6 +164,7 @@ int main() {
     }
 
     pthread_mutex_init(&engineerMutex, NULL);
+    pthread_mutex_init(&queueMutex, NULL);
     sem_init(&newRequest, 0, 0);
     initQueue(&requestQueue);
 
@@ -192,6 +200,7 @@ int main() {
     // Cleanup
     for (int i = 0; i < 5; i++) sem_destroy(&sat[i].handled_sem);
     pthread_mutex_destroy(&engineerMutex);
+    pthread_mutex_destroy(&queueMutex);
     sem_destroy(&newRequest);
 
     return 0;
