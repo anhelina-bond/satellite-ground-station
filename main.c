@@ -43,16 +43,18 @@ void enqueue(PriorityQueue* pq, Satellite* satellite) {
     newNode->satellite = satellite;
     newNode->next = NULL;
 
-    // Empty list or higher priority than head
+    // Case 1: Empty queue or new node has higher priority than head
     if (pq->head == NULL || pq->head->satellite->priority < satellite->priority) {
         newNode->next = pq->head;
         pq->head = newNode;
         return;
     }
 
-    // Find insertion point
+    // Case 2: Same priority as head; insert after existing same-priority nodes
     Node* current = pq->head;
-    while (current->next != NULL && current->next->satellite->priority >= satellite->priority) {
+    while (current->next != NULL && 
+           (current->next->satellite->priority > satellite->priority || 
+            (current->next->satellite->priority == satellite->priority && current->next != NULL))) {
         current = current->next;
     }
     newNode->next = current->next;
