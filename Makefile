@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -pthread -Wextra -std=c11 -pedantic
+CFLAGS = -Wall -pthread 
 TARGET = hw3
 
 all: $(TARGET)
