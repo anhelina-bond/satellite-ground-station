@@ -43,18 +43,17 @@ void enqueue(PriorityQueue* pq, Satellite* satellite) {
     newNode->satellite = satellite;
     newNode->next = NULL;
 
-    // Case 1: Empty queue or new node has higher priority than head
+    // Case 1: Insert at head if higher priority
     if (pq->head == NULL || pq->head->satellite->priority < satellite->priority) {
         newNode->next = pq->head;
         pq->head = newNode;
         return;
     }
 
-    // Case 2: Same priority as head; insert after existing same-priority nodes
+    // Case 2: Traverse to maintain FIFO for equal priorities
     Node* current = pq->head;
     while (current->next != NULL && 
-           (current->next->satellite->priority > satellite->priority || 
-            (current->next->satellite->priority == satellite->priority && current->next != NULL))) {
+           current->next->satellite->priority >= satellite->priority) {
         current = current->next;
     }
     newNode->next = current->next;
